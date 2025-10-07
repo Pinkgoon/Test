@@ -1,27 +1,54 @@
 // src/game/weapons/grenade.js
+// 수류탄 — ★사거리(maxDist) 또는 타임아웃으로 폭발 (rangeMul 애드온 대응)
 import { calcMods } from '../Addons.js';
+
 export default {
-  id:'wpn_grenade',
-  name:'수류탄',
-  desc:'던져서 터뜨린다 (범위 피해)',
-  icon:'assets/weapons/wpn_grenade.png',
-  maxLvl:5,
-  tags:['무기','비관통','발사','원거리'],
-  baseInterval:1.25,
-  range:850,
-  create(){ return { id:this.id, type:'grenade', lvl:1, cd:0, addons:[] }; },
+  id: 'wpn_grenade',
+  name: '수류탄',
+  desc: '일정 거리(또는 시간) 후 폭발',
+  icon: 'assets/weapons/wpn_grenade.png',
+  maxLvl: 5,
+  tags: ['무기','발사','원거리','폭발'],
+
+  baseInterval: 1.05,
+  baseThrowSpeed: 520,
+  baseRange: 280, // ★ 이전 체감과 유사한 투척 거리(px)
+  baseFuse: null, // 시간 타이머(선택). null이면 거리로만 터짐
+
+  create(){
+    return { id:this.id, type:'grenade', lvl:1, cd:0, addons:[] };
+  },
+
   update(inst, api){
-    const mods=calcMods(inst);
-    inst.cd-=api.dt; if(inst.cd>0) return;
-    inst.cd=Math.max(0.28,(this.baseInterval*Math.pow(0.95,inst.lvl-1)*mods.cdMul)/Math.max(0.1, api.player.attackSpeedMul));
+    const { player, dt, findNearestEnemy, state } = api;
+    const mods = calcMods(inst);
+    const levelMul = Math.pow(0.985, inst.lvl-1);
+    const interval = (this.baseInterval * levelMul * (mods.cdMul||1)) / Math.max(0.1, player.attackSpeedMul);
 
-    const t=api.findNearestEnemy(api.player.x,api.player.y); if(!t) return;
-    const a=Math.atan2(t.y-api.player.y,t.x-api.player.x);
-    const sp=300; const travel=(((this.range||850)/(300)));
-    const rad=70+8*(inst.lvl-1);
-    const dmg=api.player.dmg*(1.20+0.12*(inst.lvl-1))*mods.dmgMul;
+    inst.cd -= dt; if (inst.cd>0) return;
 
-    api.state.grenades.push({ x:api.player.x, y:api.player.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, t:travel, r:6,
-      explodeRadius:rad, explodeDmg:dmg });
+    const t = findNearestEnemy(player.x, player.y);
+    const dir = t ? Math.atan2(t.y - player.y, t.x - player.x) : 0;
+
+    const spd = this.baseThrowSpeed;
+    const maxDist = this.baseRange * (mods.rangeMul||1); // ★ 애드온으로 증가 예정
+    const exR = 88 + 6*(inst.lvl-1);
+    const exD = player.dmg * (1.05 + 0.12*(inst.lvl-1)) * (mods.dmgMul||1);
+
+    // 수류탄 생성 (index.js에서 travel 누적/폭발 처리)
+    state.grenades ??= [];
+    state.grenades.push({
+      x: player.x, y: player.y,
+      vx: Math.cos(dir)*spd, vy: Math.sin(dir)*spd,
+      explodeRadius: exR,
+      explodeDmg: exD,
+      // ★ 사거리 기반 폭발
+      maxDist,
+      travel: 0,
+      // 하위호환: 퓨즈 타임(설정 시 거리와 경쟁)
+      t: this.baseFuse,
+    });
+
+    inst.cd = interval;
   }
 };

@@ -1,52 +1,89 @@
 // src/game/weapons/chain.js
+// 번개사슬 — 사거리 기반 타게팅 & 연쇄.
+// 요구사항: 사거리 = 블래스터 사거리의 2/3, 연쇄 사거리도 비례 증가.
 import { calcMods } from '../Addons.js';
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const dist2=(ax,ay,bx,by)=>{ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; };
+import blaster from './blaster.js';
+
+const BLASTER_RANGE = blaster?.baseRange ?? 520;
 
 export default {
-  id:'wpn_chain',
-  name:'번개사슬',
-  desc:'가장 가까운 적부터 사거리 내 연쇄 타격',
-  icon:'assets/weapons/wpn_chain.png',
-  maxLvl:5,
-  tags:['무기','비관통','원거리'],
-  baseInterval:1.05,
-  create(){ return { id:this.id, type:'chain', lvl:1, cd:0, addons:[] }; },
+  id: 'wpn_chain',
+  name: '번개사슬',
+  desc: '가장 가까운 적에게 번개를 내리고 주변으로 연쇄',
+  icon: 'assets/weapons/wpn_chain.png',
+  maxLvl: 5,
+  tags: ['무기','발사','원거리'],
+
+  baseInterval: 0.9,
+  // ★ 블래스터 사거리의 2/3
+  baseRange: Math.round(BLASTER_RANGE * 2 / 3), // 347 (BLASTER=520 일 때)
+  // 연쇄 사거리는 유효 사거리 * 이 비율 (사거리 애드온에 함께 비례함)
+  linkRangeFactor: 0.70,
+
+  create(){
+    return { id:this.id, type:'chain', lvl:1, cd:0, addons:[] };
+  },
+
   update(inst, api){
-    const mods=calcMods(inst);
-    inst.cd-=api.dt; if(inst.cd>0) return;
-    inst.cd=Math.max(0.16,(this.baseInterval*Math.pow(0.96,inst.lvl-1)*mods.cdMul)/Math.max(0.1, api.player.attackSpeedMul));
+    const { dt, player, state, dropGem } = api;
+    const mods = calcMods(inst); // rangeMul, dmgMul, cdMul
+    const levelMul = Math.pow(0.985, inst.lvl-1);
+    const interval = (this.baseInterval * levelMul * (mods.cdMul||1)) / Math.max(0.1, player.attackSpeedMul);
 
-    const startIdx=api.findNearestIdx(api.player.x,api.player.y);
-    if(startIdx<0) return;
+    inst.cd -= dt; if (inst.cd > 0) return;
 
-    const chainByLvl=[3,4,4,5,5];
-    const hops=chainByLvl[clamp(inst.lvl-1,0,4)];
-    const range=220+30*(inst.lvl-1);
-    const dmg=api.player.dmg*(0.85+0.08*(inst.lvl-1))*mods.dmgMul;
+    // 유효 사거리/연쇄 사거리 (애드온 rangeMul 반영)
+    const range = this.baseRange * (mods.rangeMul || 1);
+    const linkRange = range * (this.linkRangeFactor || 0.7);
 
-    const used=new Set(); let curIdx=startIdx;
-    const segs=[]; let fromX=api.player.x, fromY=api.player.y;
-    for(let h=0; h<hops; h++){
-      if(curIdx<0) break;
-      const e=api.state.enemies[curIdx];
-      used.add(curIdx);
+    // 사거리 내 최단거리 적 탐색
+    let first = null, best = 1e15;
+    for (const e of state.enemies){
+      const dx = e.x - player.x, dy = e.y - player.y, d2 = dx*dx + dy*dy;
+      if (d2 <= range*range && d2 < best){ best = d2; first = e; }
+    }
+    if (!first){ inst.cd = interval*0.4; return; }
 
-      e.hp-=dmg;
-      if(e.hp<=0){ api.state.enemies.splice(curIdx,1); api.state.score+=25; api.dropGem(e.x,e.y); }
+    // 레벨별 연쇄 횟수: 3 / 4 / 4 / 5 / 5
+    const jumpsByLvl = [3,4,4,5,5];
+    const jumps = jumpsByLvl[Math.min(inst.lvl-1, jumpsByLvl.length-1)];
+    const dmg = player.dmg * (0.85 + 0.10*(inst.lvl-1)) * (mods.dmgMul||1);
 
-      segs.push({ x1:fromX, y1:fromY, x2:e.x, y2:e.y });
-      fromX=e.x; fromY=e.y;
+    const visited = new Set();
+    const pushArc = (x1,y1,x2,y2)=>{
+      state.arcs ??= [];
+      state.arcs.push({ x1,y1,x2,y2, t:0.08 });
+    };
 
-      let best=-1,bestD=1e15;
-      for(let i=0;i<api.state.enemies.length;i++){
-        if(used.has(i)) continue;
-        const d2=dist2(fromX,fromY, api.state.enemies[i].x, api.state.enemies[i].y);
-        if(d2<bestD && d2<=range*range){ bestD=d2; best=i; }
+    // 1타 (플레이어 → 첫 대상)
+    pushArc(player.x, player.y, first.x, first.y);
+    first.hp -= dmg;
+    if (first.hp <= 0){
+      const ix = state.enemies.indexOf(first);
+      if (ix>=0){ state.enemies.splice(ix,1); state.score+=25; dropGem(first.x,first.y); }
+    } else visited.add(first);
+
+    // 연쇄
+    let last = first;
+    for (let k=1; k<jumps; k++){
+      // 마지막 대상에서 linkRange 내 미방문 적 탐색
+      let next = null, best2 = 1e15;
+      for (const e of state.enemies){
+        if (visited.has(e)) continue;
+        const dx = e.x - last.x, dy = e.y - last.y, d2 = dx*dx + dy*dy;
+        if (d2 <= linkRange*linkRange && d2 < best2){ best2 = d2; next = e; }
       }
-      curIdx=best;
+      if (!next) break;
+
+      pushArc(last.x, last.y, next.x, next.y);
+      next.hp -= dmg;
+      if (next.hp <= 0){
+        const ix = state.enemies.indexOf(next);
+        if (ix>=0){ state.enemies.splice(ix,1); state.score+=25; dropGem(next.x,next.y); }
+      } else visited.add(next);
+      last = next;
     }
 
-    if(segs.length){ api.state.arcs.push({ segs, t:0.10, color:'#a6d2ff' }); }
+    inst.cd = interval;
   }
 };

@@ -3,7 +3,7 @@
 // ★ 고유(unique) 애드온은 노란색 강조
 
 import { getAddonById } from '../game/Addons.js';
-import { getWeaponById } from '../game/weapons/index.js';
+import { getWeaponById } from '../game/Weapons.js';
 
 export class InventoryUI {
   constructor(rootEl, handlers){
@@ -16,69 +16,83 @@ export class InventoryUI {
     this.wrap = document.createElement('div');
     this.wrap.className = 'inv-overlay';
     Object.assign(this.wrap.style,{
-      position:'fixed', inset:'0', display:'none', zIndex: 99999,
-      background:'rgba(10,14,20,0.86)', color:'#fff'
+      position:'absolute', inset:0, display:'none', zIndex:20,
+      background:'rgba(10,12,16,0.72)', backdropFilter:'blur(6px)'
     });
 
     const panel = document.createElement('div');
-    panel.className = 'panel';
     Object.assign(panel.style,{
       position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)',
-      width:'min(1120px, 92vw)', height:'min(80vh, 720px)',
-      border:'1px solid rgba(255,255,255,0.12)', borderRadius:'18px',
-      background:'rgba(255,255,255,0.04)', backdropFilter:'blur(4px)', boxShadow:'0 10px 30px rgba(0,0,0,0.35)',
-      display:'grid', gridTemplateRows:'auto 1fr', overflow:'hidden'
+      width:'960px', maxWidth:'calc(100% - 40px)', height:'600px',
+      background:'#131722', border:'1px solid rgba(255,255,255,0.12)',
+      borderRadius:'16px', boxShadow:'0 30px 80px rgba(0,0,0,.45)', display:'grid',
+      gridTemplateColumns:'1.1fr 0.9fr', gap:'0', overflow:'hidden'
     });
 
-    const header = document.createElement('div');
-    Object.assign(header.style,{
-      display:'flex', alignItems:'center', justifyContent:'space-between',
-      padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,0.10)', background:'rgba(0,0,0,.2)'
-    });
-    const title = document.createElement('div'); title.textContent = '인벤토리';
-    Object.assign(title.style,{ fontWeight:'700', letterSpacing:'0.3px' });
+    this.left = document.createElement('div');
+    Object.assign(this.left.style,{ padding:'18px 18px 12px 18px', overflow:'auto' });
 
-    const closeBtn = document.createElement('button'); closeBtn.textContent = '닫기 (ESC)';
-    Object.assign(closeBtn.style,{ padding:'6px 10px', borderRadius:'10px', background:'rgba(255,255,255,.06)', color:'#fff', border:'1px solid rgba(255,255,255,0.18)', cursor:'pointer' });
-    closeBtn.onclick = ()=>this.h.onClose?.();
+    this.right = document.createElement('div');
+    Object.assign(this.right.style,{ padding:'18px', borderLeft:'1px solid rgba(255,255,255,0.08)', display:'flex', flexDirection:'column' });
 
-    const body = document.createElement('div');
-    Object.assign(body.style,{
-      display:'grid', gridTemplateColumns:'1.1fr 1fr', gap:'12px', padding:'12px'
-    });
+    const titleL = document.createElement('div');
+    titleL.textContent = '장착 무기';
+    Object.assign(titleL.style,{ fontWeight:700, color:'#cde3ff', marginBottom:'10px' });
 
-    // 왼쪽: 장착 중 무기 4칸
-    const left = document.createElement('div');
-    const leftTitle = document.createElement('div'); leftTitle.textContent='장착 무기 (최대 4개)'; leftTitle.className='muted';
+    const titleR = document.createElement('div');
+    titleR.textContent = '애드온 가방 (드래그하여 장착)';
+    Object.assign(titleR.style,{ fontWeight:700, color:'#cde3ff', marginBottom:'10px' });
+
     this.weaponsGrid = document.createElement('div');
-    Object.assign(this.weaponsGrid.style,{
-      display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:'10px', marginTop:'8px'
-    });
-    left.append(leftTitle, this.weaponsGrid);
+    Object.assign(this.weaponsGrid.style,{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' });
 
-    // 오른쪽: 애드온 가방
-    const right = document.createElement('div');
-    const rightTitle = document.createElement('div'); rightTitle.textContent='애드온 가방 (최대 15개)'; rightTitle.className='muted';
     this.addonBag = document.createElement('div');
-    Object.assign(this.addonBag.style,{
-      display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:'8px', marginTop:'8px'
-    });
-    right.append(rightTitle, this.addonBag);
+    Object.assign(this.addonBag.style,{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:'10px', flex:'1 1 auto', overflow:'auto' });
 
-    body.append(left, right);
-    header.append(title, closeBtn);
-    panel.append(header, body);
-    this.wrap.append(panel);
-    this.root.append(this.wrap);
+    const close = document.createElement('button');
+    close.textContent = '닫기 (Esc)';
+    Object.assign(close.style,{ marginTop:'12px', alignSelf:'flex-end', background:'#202736', color:'#fff', border:'1px solid rgba(255,255,255,0.16)', padding:'8px 12px', borderRadius:'10px', cursor:'pointer' });
+    close.onclick = ()=>this.h.onClose?.();
+
+    this.left.append(titleL, this.weaponsGrid);
+    this.right.append(titleR, this.addonBag, close);
+    panel.append(this.left, this.right);
+    this.wrap.appendChild(panel);
+    this.root.appendChild(this.wrap);
+
+    const style = document.createElement('style');
+    style.textContent = `
+    .chip{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid rgba(255,255,255,.16); margin-right:6px; color:#eaf1ff; background:rgba(255,255,255,.06); }
+    .tag-w{ background:rgba(136,190,255,.14); border-color:rgba(136,190,255,.35); }
+    .tag-np{ background:rgba(255,170,136,.14); border-color:rgba(255,170,136,.35); }
+    .tag-p{ background:rgba(153,255,165,.12); border-color:rgba(153,255,165,.35); }
+    .tag-summon{ background:rgba(240,196,255,.12); border-color:rgba(240,196,255,.35); }
+    .slot{ width:48px;height:48px;border-radius:10px;border:1px dashed rgba(255,255,255,.25); display:flex;align-items:center;justify-content:center; background:rgba(255,255,255,.04); position:relative; }
+    .slot.err{ border-color:#ff6b6b; box-shadow:0 0 0 2px rgba(255,107,107,.35) inset; }
+    .slot img{ width:100%; height:100%; object-fit:contain; border-radius:10px; }
+    .slot.unique{ border:1px solid rgba(255,214,74,.9); box-shadow:0 0 0 2px rgba(255,214,74,.25) inset; }
+    .adn{ width:60px;height:60px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;cursor:grab; position:relative; }
+    .adn.unique{ border-color: rgba(255,214,74,.9); box-shadow:0 0 0 2px rgba(255,214,74,.25) inset; background: rgba(255,214,74,.08); }
+    .adn img{ width:100%;height:100%;object-fit:contain;border-radius:12px; }
+    .card{ border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:12px; background:rgba(255,255,255,.03);}
+    .card h4{ margin:0; font-size:14px; color:#fff; }
+    .muted{ color:#9fb2c8; font-size:12px; }
+    .unlink{ background:#2a2f3d; color:#fff; border:1px solid rgba(255,255,255,.16); border-radius:10px; padding:6px 8px; cursor:pointer; }
+    `;
+    document.head.appendChild(style);
   }
 
-  show(){ this.wrap.style.display='block'; }
-  hide(){ this.wrap.style.display='none'; }
+  show(){ this.wrap.style.display = 'block'; }
+  hide(){ this.wrap.style.display = 'none'; }
 
   tagChip(t){
-    const chip = document.createElement('span'); chip.textContent=t;
-    chip.className='chip'; chip.style.marginRight='6px';
-    return chip;
+    const span = document.createElement('span'); span.className='chip';
+    span.textContent = t;
+    if (t==='무기') span.classList.add('tag-w');
+    else if (t==='비관통') span.classList.add('tag-np');
+    else if (t==='관통') span.classList.add('tag-p');
+    else if (t==='소환') span.classList.add('tag-summon');
+    return span;
   }
 
   _weaponCard(wInst){
@@ -92,43 +106,45 @@ export class InventoryUI {
     Object.assign(head.style,{ display:'grid', gridTemplateColumns:'64px 1fr auto', gap:'12px', alignItems:'center', margin:'8px 0 10px 0' });
 
     const icon = document.createElement('img');
-    Object.assign(icon.style,{ width:'64px', height:'64px', objectFit:'contain', background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.12)' });
+    Object.assign(icon.style,{ width:'64px', height:'64px', objectFit:'contain', borderRadius:'12px', background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.12)' });
     icon.src = wdef.icon || '';
 
     const name = document.createElement('div');
     name.innerHTML = `<h4>${wdef.name||wInst.id}</h4><div class="muted">${wdef.desc||''}</div>`;
 
-    const lvl = document.createElement('div');
-    Object.assign(lvl.style,{ display:'flex', alignItems:'center', gap:'8px' });
-    const lvlChip = document.createElement('span'); lvlChip.textContent=`Lv. ${wInst.lvl||1}`; lvlChip.className='chip';
-    const unBtn = document.createElement('button'); unBtn.textContent='해제'; unBtn.className='unlink';
-    unBtn.onclick = ()=>this.h.onUnequipWeapon?.(wInst.id);
-    lvl.append(lvlChip, unBtn);
+    const lvl = document.createElement('div'); lvl.className='chip'; lvl.textContent=`Lv.${wInst.lvl||1}`;
 
-    head.append(icon, name, lvl);
-
-    // 애드온 슬롯 3개
     const slots = document.createElement('div');
-    Object.assign(slots.style,{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px' });
+    Object.assign(slots.style,{ display:'flex', gap:'8px', marginTop:'4px' });
 
     const makeSlot = (idx)=>{
-      const slot = document.createElement('div'); slot.className='slot'; slot.dataset.slot=String(idx);
-      Object.assign(slot.style,{ height:'52px', border:'1px dashed rgba(255,255,255,.18)', borderRadius:'12px', display:'grid', placeItems:'center', background:'rgba(255,255,255,.03)' });
-      slot.ondragover = e=>{ e.preventDefault(); slot.style.background='rgba(255,255,255,.06)'; };
-      slot.ondragleave = e=>{ slot.style.background='rgba(255,255,255,.03)'; };
-      slot.ondrop = e=>{
-        e.preventDefault(); slot.style.background='rgba(255,255,255,.03)';
+      const s = document.createElement('div'); s.className='slot'; s.dataset.idx = String(idx);
+      const filled = wInst.addons?.[idx];
+      if (filled) {
+        const adef = getAddonById(filled.id);
+        const img = document.createElement('img'); img.src = adef?.icon || ''; s.appendChild(img);
+        s.title = `${adef?.name||filled.id}\n${adef?.desc||''}`;
+        if (adef?.unique) s.classList.add('unique'); // ★ 고유 슬롯 강조
+        s.onclick = ()=>this.h.onRemoveAddon?.({weaponId:wInst.id, slot:idx});
+      }
+      s.ondragover = (e)=>{ e.preventDefault(); };
+      s.ondragenter = (e)=>{ e.preventDefault(); s.classList.remove('err'); };
+      s.ondrop = (e)=>{
+        e.preventDefault();
         const aid = e.dataTransfer.getData('text/addon-id');
-        if (aid) this.h.onEquipAddon?.(wInst.id, aid);
+        if (!aid) return;
+        this.h.onDropAddon?.({weaponId:wInst.id, addonId:aid});
       };
-      const cell = (wInst.addons||[])[idx];
-      if (cell) slot.appendChild(this._addonCell(cell));
-      return slot;
+      return s;
     };
 
     for (let i=0;i<3;i++) slots.appendChild(makeSlot(i));
 
-    card.append(tags, head, slots);
+    const un = document.createElement('button'); un.className='unlink'; un.textContent='해제';
+    un.onclick = ()=>this.h.onUnequipWeapon?.(wInst.id);
+
+    card.append(tags, head, slots, un);
+    head.append(icon, name, lvl);
     return card;
   }
 
