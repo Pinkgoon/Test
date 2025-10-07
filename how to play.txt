@@ -1,0 +1,5 @@
+PowerShell/터미널에서 프로젝트 폴더로 이동 후 실행:
+cd C:\Users\pinkgoon\Desktop\van-survivor
+py -m http.server 8000
+
+이후 브라우저에서: http://localhost:8000/

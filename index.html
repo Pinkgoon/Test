@@ -1,0 +1,113 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>뱀서 모듈 버전</title>
+<style>
+:root{ --bg:#0b0f14; --panel:#121821; --line:#223; --text:#e7f0ff; --sub:#a9b7d0; --accent:#7acbff; --danger:#ff6b6b; --ok:#59e3a7; }
+*{box-sizing:border-box}
+html,body{height:100%; margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,Helvetica,Arial,sans-serif}
+#wrap{position:relative; width:100%; height:100%; overflow:hidden}
+canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none}
+.hud{position:absolute; left:0; right:0; top:0; padding:10px 12px; display:flex; gap:10px; align-items:center; pointer-events:none}
+.bar{height:14px; background:rgba(255,255,255,.08); border:1px solid #223; border-radius:8px; overflow:hidden; min-width:160px}
+.bar>i{display:block; height:100%; background:linear-gradient(90deg,var(--ok),#8ef9d0); width:0}
+.bar.hp>i{background:linear-gradient(90deg,#ff9a9a,var(--danger))}
+.chip{padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.04); font-size:12px}
+.spacer{flex:1}
+.btn{pointer-events:auto; user-select:none; cursor:pointer; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.06)}
+.btn:hover{background:rgba(255,255,255,.09)}
+.overlay{position:absolute; inset:0; display:none; place-items:center; background:rgba(5,8,12,.65); backdrop-filter: blur(4px)}
+.overlay.show{display:grid}
+.panel{width:min(780px,92vw); background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 20px 40px rgba(0,0,0,.45)}
+h1,h2{margin:0 0 10px} p{margin:6px 0; color:var(--sub)}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px}
+.card{border:1px solid var(--line); background:rgba(255,255,255,.03); padding:12px; border-radius:12px}
+.row{display:flex; align-items:center; gap:10px; margin:8px 0}
+.row label{min-width:78px; font-size:13px; color:var(--sub)}
+input[type=file]{display:block; width:100%} input[type=range]{width:100%}
+.preview{display:inline-flex; align-items:center; justify-content:center; width:64px; height:64px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.03); overflow:hidden}
+.preview img{max-width:100%; max-height:100%; display:block}
+#joy{position:absolute; left:12px; bottom:14px; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,.04); border:1px solid var(--line); touch-action:none}
+#joy>i{position:absolute; left:50%; top:50%; width:48px; height:48px; transform:translate(-50%,-50%); border-radius:50%; background:rgba(255,255,255,.08); border:1px solid var(--line)}
+@media (hover:hover){ #joy{display:none} }
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="game"></canvas>
+<div class="hud">
+<div class="chip" id="time">00:00</div>
+<div class="bar hp" title="HP"><i id="hpbar"></i></div>
+<div class="bar" title="XP" style="min-width:220px"><i id="xpbar"></i></div>
+<div class="chip" id="lvl">Lv. 1</div>
+<div class="chip" id="score">Score 0</div>
+<div class="spacer"></div>
+<div class="btn" id="skinBtn">스킨</div>
+<div class="btn" id="pauseBtn">일시정지</div>
+<div class="btn" id="restartBtn">다시 시작</div>
+</div>
+
+
+<div class="overlay show" id="start">
+<div class="panel">
+<h1>뱀서 모듈 버전</h1>
+<p>키보드 WASD/화살표로 이동 · 자동 공격</p>
+<p class="hint">같은 폴더에 <code>player.png</code>, <code>enemy.png</code>가 있으면 자동 기본 스킨 적용. 업로드 스킨은 우선 적용되며 브라우저에 저장됨.</p>
+<div style="display:flex; gap:10px; margin-top:14px">
+<button class="btn" id="startBtn">게임 시작</button>
+</div>
+</div>
+</div>
+
+
+<div class="overlay" id="skins">
+<div class="panel">
+<h2>스킨 설정</h2>
+<div class="grid">
+<div class="card">
+<div style="font-weight:700; margin-bottom:6px">플레이어</div>
+<div class="row"><label>이미지</label><input type="file" id="pFile" accept="image/*"></div>
+<div class="row"><label>크기</label><input type="range" id="pSize" min="0.6" max="1.8" step="0.05" value="1"></div>
+<div class="row"><label>미리보기</label><span class="preview"><img id="pPrev" alt=""></span></div>
+<div style="display:flex; gap:8px"><button class="btn" id="pClear">기본으로</button></div>
+</div>
+<div class="card">
+<div style="font-weight:700; margin-bottom:6px">적</div>
+<div class="row"><label>이미지</label><input type="file" id="eFile" accept="image/*"></div>
+<div class="row"><label>크기</label><input type="range" id="eSize" min="0.6" max="1.8" step="0.05" value="1"></div>
+<div class="row"><label>미리보기</label><span class="preview"><img id="ePrev" alt=""></span></div>
+<div style="display:flex; gap:8px"><button class="btn" id="eClear">기본으로</button></div>
+</div>
+</div>
+<div style="display:flex; gap:10px; margin-top:12px">
+<button class="btn" id="skinClose">닫기</button>
+</div>
+</div>
+</div>
+
+
+<div class="overlay" id="levelup">
+<div class="panel">
+<h2>레벨 업!</h2>
+<p>업그레이드를 선택하세요.</p>
+<div class="grid" id="upgrid"></div>
+</div>
+</div>
+
+
+<div class="overlay" id="gameover">
+<div class="panel" style="text-align:center">
+<h2>게임 오버</h2>
+<p id="finalStats">생존 시간 00:00 · 점수 0 · 레벨 1</p>
+<div style="display:flex; justify-content:center; gap:10px; margin-top:8px">
+<button class="btn" id="again">다시 플레이</button>
+</div>
+</div>
+</div>
+
+
+<div id="joy"><i></i></div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
